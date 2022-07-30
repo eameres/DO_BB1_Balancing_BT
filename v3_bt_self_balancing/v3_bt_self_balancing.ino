@@ -9,6 +9,10 @@
 //  I run this on an Arduino Mega with an old sparkfun USB shield  
 //  so I avoid using normal servo library which ties up timer 1
 //
+// requires USBHostShield library for Bluetooth/PS3
+// requires Servo_Hardware_PWM library to avoid timer conflicts between libraries
+// requires DFRobotDFPlayerMini library for audio/MP3 playback support
+// uses built in "wire" library to talk I2C with MPU6050 IMU for balancing
 
 #include <Servo_Hardware_PWM.h>
 Servo tiltServo;  // create servo object to control a servo
@@ -41,14 +45,15 @@ bool soundPlaying = false;
 void printDetail(uint8_t type, int value);
 
 #define IMU_ENABLED
+#define DFPLAYER
+#define RUNMOTORS
+
+// might no longer be applicable !
 //#define myDebug
 //#define myDebugGyro
 //#define myDebugRC
 //#define myDebugSpeeds
 //#define myDebugPS3Analog
-
-#define DFPLAYER
-#define RUNMOTORS
 
 ////////////////VARIABLE DEFINATION///////////////
 const int dir1pin =47; //Motor Direction pin (goes to DIR1)
@@ -56,8 +61,8 @@ const int spe1pin =46; //Motor Speed pin (goes to PWM1)
 const int dir2pin =45; //Motor Direction pin (goes to DIR2)
 const int spe2pin =44; //Motor Speed pin (goes to PWM2)
 
-const int panPWM = 6;
-const int tiltPWM = 5;
+const int panPWM = 6; // DO-BB1 has a spinning dome continuous rotation servo
+const int tiltPWM = 5; // DO-BB1 uses a bar servo similar to DO
 
 const int MPU = 0x68; // MPU6050 I2C address
 
