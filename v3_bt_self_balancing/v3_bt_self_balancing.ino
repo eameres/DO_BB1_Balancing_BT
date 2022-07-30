@@ -14,6 +14,24 @@
 // requires DFRobotDFPlayerMini library for audio/MP3 playback support
 // uses built in "wire" library to talk I2C with MPU6050 IMU for balancing
 
+
+// features:
+
+// movement is controlled by main analog stick, stick-button enables/disables IMU
+//
+// analog trigger controls servo according to last combination of D-pad buttons pressed
+//
+// select sound using X/O buttons, use L1 to play/pause
+
+// 7/30/22  - added tilt trim, hold PS button and use up/down d-pad buttons to adjust
+//          - adjust volume by holding PS button and using X/O buttons
+// 
+// todo : 
+// - save tilt trim, volume settings in EEPROM
+// - set joystick limits using PS button 
+// - add LED support of some sort, maybe "neopixels", if not something simpler
+// - add voice response messages for configuration and status
+
 #include <Servo_Hardware_PWM.h>
 Servo tiltServo;  // create servo object to control a servo
 Servo panServo;  // create servo object to control a servo
@@ -55,7 +73,8 @@ void printDetail(uint8_t type, int value);
 //#define myDebugSpeeds
 //#define myDebugPS3Analog
 
-////////////////VARIABLE DEFINATION///////////////
+////////////////VARIABLE DEFINITION///////////////
+
 const int dir1pin =47; //Motor Direction pin (goes to DIR1)
 const int spe1pin =46; //Motor Speed pin (goes to PWM1)
 const int dir2pin =45; //Motor Direction pin (goes to DIR2)
@@ -69,6 +88,7 @@ const int MPU = 0x68; // MPU6050 I2C address
 float timePrev;
 const float rad_to_deg = 180/3.141592654;
 
+const int LoopInterval = 4;
 
 //  for estimating the IMU error profile
 
@@ -292,8 +312,8 @@ void setup()
   pinMode(dir2pin,OUTPUT);
   pinMode(spe2pin,OUTPUT);
 
- tiltServo.attach(tiltPWM);  // attach the tilt servo to the servo object
- panServo.attach(panPWM);  // attach the pan servo to the servo object
+  tiltServo.attach(tiltPWM);  // attach the tilt servo to a servo object
+  panServo.attach(panPWM);    // attach the pan servo to a servo object
 
   TCCR5B = TCCR5B & B11111000 | B00000001;  // for PWM frequency of 31372.55 Hz
   heartBeat = timePrev = millis(); ///////////////STARTS COUNTING TIME IN MILLISECONDS/////////////
@@ -326,6 +346,9 @@ void setup()
 
 int timeOut = 0;
 
+// I use function pointers in a "clever" way to avoid running code before initialization
+// in order for the right "handler" to get installed, the initialization has to run and install it
+
 typedef void (*GeneralFunction)(int s1,int d1,int s2,int d2);
 
 void _doNothing(int s1,int d1,int s2,int d2) ;
@@ -348,6 +371,9 @@ void _writeToMotors(int s1,int d1,int s2,int d2)
   analogWrite(spe2pin,s2); //increase the speed of the motor from 0 to 255
 }
 
+//  similar to motor init procedure, 
+// we "install" a do nothing PID function that does re-init and installs the real version
+
 typedef float (*PID_Function)(float,float);
 
 float initialPID(float target, float current) ;
@@ -366,6 +392,8 @@ float initialPID(float target, float current) {
   oldValue = 0;
   
   doPID = calculatePID;
+  
+  return 0.0; // don't do any compensation yet!
 }
 
 float calculatePID(float target, float current) { 
@@ -421,6 +449,7 @@ void loop()
   float Gyro_angle[2];
   
   static float Total_angle[2] = {0.0, 0.0 };
+  static int tiltOffset = 0;
 
   int motorspeed1 = 0;
   int motordirection1 = HIGH;
@@ -463,6 +492,13 @@ void loop()
           nextSound--;
     }
     
+    if (PS3.getButtonPress(PS)){
+      if (PS3.getButtonClick(UP)) 
+        tiltOffset++;
+      else if (PS3.getButtonClick(DOWN)) 
+        tiltOffset--;
+    }
+    
 #ifdef DFPLAYER   
     if (PS3.getButtonClick(L1)){
     
@@ -483,7 +519,7 @@ void loop()
   }
   static float timerValue = 0;
   
-  if (millis() - timerValue < 4) // wait until at least 10ms have passed to run the loop
+  if (millis() - timerValue < LoopInterval) // wait until minimum interval has passed to run the loop
     return;
 
   if (millis() - timerValue > 100){ // if more than 100 ms have passed, reset the timer and abort the loop, this must be the first time through
@@ -588,8 +624,7 @@ void loop()
       yAxisRaw = constrain( yAxisRaw, 0,255);
       
       pan = (xAxisRaw/255.0)*180.0;
-      tilt = (yAxisRaw/255.0)*180.0;
-
+      tilt = ((yAxisRaw/255.0)*180.0) + tiltOffset;
   }
     
   panServo.write(pan);
