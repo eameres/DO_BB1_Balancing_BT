@@ -413,7 +413,7 @@ float calculatePID(float target, float current) {
 
   // Calculate the integral term (accumulated error)
   errorSum += error; 
-  errorSum = constrain(errorSum,-500,500);
+  errorSum = constrain(errorSum,-500,500); // maximum error to accumulate
 
   // Multiply each term by its constant, and add it all up
   float result = (Kp * error) + (Ki * (errorSum * dT)) + (Kd * (current - oldValue) / dT);
@@ -431,11 +431,9 @@ float calculatePID(float target, float current) {
   lastTime = thisTime;
 
   // Limit PID value to maximum values
-  
-  if (result > 0)
-    result = map(result,0,2100,0,maxPID);
-  else
-    result = map(result,0,-2100,0,-maxPID);
+  // note that 2100 is a "magic" value used in the original code, subject to further research
+  //
+  result = map(result,-2100,2100,-maxPid,maxPID);
   
   return result ;
 }
@@ -536,6 +534,8 @@ void loop()
       xAxisRaw = PS3.getAnalogHat(RightHatX) - 127;
       yAxisRaw = (255 - PS3.getAnalogHat(RightHatY)) - 127;
 
+      // create a dead zone of -12 to 12 on each axis
+      
       if (abs(xAxisRaw) < 12)
         xAxisRaw = 0;
 
@@ -569,6 +569,10 @@ void loop()
       Serial.print("yraw ");
       Serial.print(yAxisRaw);
       */
+
+      
+      // create a dead zone of -12 to 12 on each axis
+      
       if (abs(xAxisRaw) < 12)
        xAxisRaw = 0;
 
@@ -587,10 +591,14 @@ void loop()
       Serial.print("yrawClipped ");
       Serial.print(yAxisRaw);
       */
+
+      //  "mix" the 2 axes to translate from joystick to "tank-style" control, could be fancier, perhaps proportional.
       
       xAxis = constrain(yAxisRaw + xAxisRaw,-127,127);
       yAxis = constrain(yAxisRaw - xAxisRaw,-127,127);
-      
+
+      // make note of the last D-pad buttons clicked to set the "mode" of the analog trigger and servo control
+      //
       if (PS3.getButtonClick(UP) || PS3.getButtonClick(DOWN) || PS3.getButtonClick(LEFT) || PS3.getButtonClick(RIGHT)){
           dPad = 0;
           if (PS3.getButtonPress(LEFT)) 
@@ -604,7 +612,7 @@ void loop()
             dPad += 8;
       }
 
-      yAxisRaw = xAxisRaw = PS3.getAnalogButton(L2);
+      yAxisRaw = xAxisRaw = PS3.getAnalogButton(L2); // get the magnitude of the servo control
 
       if (dPad & 1)
         xAxisRaw += 127;
@@ -624,12 +632,14 @@ void loop()
       yAxisRaw = constrain( yAxisRaw, 0,255);
       
       pan = (xAxisRaw/255.0)*180.0;
-      tilt = ((yAxisRaw/255.0)*180.0) + tiltOffset;
+      tilt = ((yAxisRaw/255.0)*180.0) + tiltOffset; // apply the tilt offset ("trim")
   }
     
   panServo.write(pan);
   tiltServo.write(tilt);
 
+  // scale the axes (-127 - 127) to the motor speeds  (-255 - 255)
+  //
   motorspeed1 = xAxis *2;
   motorspeed2 = yAxis *2;
   
@@ -658,6 +668,9 @@ void loop()
    * DO NOT USE ANY DELAYS INSIDE THE LOOP OTHERWISE THE BOT WON'T BE 
    * ABLE TO CORRECT THE BALANCE FAST ENOUGH
    * ALSO, DONT USE ANY SERIAL PRINTS. BASICALLY DONT SLOW DOWN THE LOOP SPEED.
+   * 
+   * ea: I very sparingly use Serial.print for a heartbeat (above), only once per second, 
+   *     will change that to an LED blink eventually
   */
     float nTime = millis();
     
@@ -817,6 +830,7 @@ void loop()
     writeToMotors(motorspeed1, motordirection1, motorspeed2, motordirection2);
     
     if (myDFPlayer.available()) {
+      // this happens so seldomly it won't cause IMU problems either, I'll eventually change
       printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
   }
 }
