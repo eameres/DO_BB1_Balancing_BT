@@ -89,6 +89,7 @@ float timePrev;
 const float rad_to_deg = 180/3.141592654;
 
 const int LoopInterval = 4;
+const float tauScale = 1.0;
 
 //  for estimating the IMU error profile
 
@@ -433,7 +434,7 @@ float calculatePID(float target, float current) {
   // Limit PID value to maximum values
   // note that 2100 is a "magic" value used in the original code, subject to further research
   //
-  result = map(result,-2100,2100,-maxPid,maxPID);
+  result = map(result,-2100,2100,-maxPID,maxPID);
   
   return result ;
 }
@@ -768,15 +769,15 @@ void loop()
   }
   #endif
   
-    //Gyr_rawX -= GyroErrorX;
-    Gyr_rawY -= GyroErrorY;
+    Gyr_rawX -= GyroErrorX;
+    //Gyr_rawY -= GyroErrorY;
     //Gyr_rawZ -= GyroErrorZ;
 
-    Gyr_rawX = Gyr_rawZ = 0;
+    //Gyr_rawX = Gyr_rawZ = 0;
     
     ////////////////////CONVERTING RAW DATA TO ANGLES///////////////////////
     Gyro_angle[0] = Gyr_rawX/131.0; 
-    Gyro_angle[1] = Gyr_rawY/131.0;
+    //Gyro_angle[1] = Gyr_rawY/131.0;
 
     /*
     Serial.print(" Gyro_angle[0]: ");
@@ -789,10 +790,10 @@ void loop()
     const float tau=0.075;
     float a=0.0;
     
-    a=tau/(tau+(elapsedTime/3.0)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
+    a=tau/(tau+(elapsedTime/tauScale)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
     
     Total_angle[0] = a *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + (1-a)*Acceleration_angle[0];
-    Total_angle[1] = a *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + (1-a)*Acceleration_angle[1];
+    //Total_angle[1] = a *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + (1-a)*Acceleration_angle[1];// really don't care about the orthogonal axis (roll)
     
     ////TOTAL_ANGLE[0] IS THE PITCH ANGLE WHICH WE NEED////////////
 
@@ -824,8 +825,10 @@ void loop()
       motordirection2 = HIGH;  
     }
 
-    motorspeed1 = constrain(motorspeed1,0,255);
-    motorspeed2 = constrain(motorspeed2,0,255);
+    // in case that pesky PID through it out of 0-255 range
+    //
+    motorspeed1 = constrain(motorspeed1,0,255); 
+    motorspeed2 = constrain(motorspeed2,0,255); 
     
     writeToMotors(motorspeed1, motordirection1, motorspeed2, motordirection2);
     
