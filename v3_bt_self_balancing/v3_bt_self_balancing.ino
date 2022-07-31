@@ -723,13 +723,16 @@ void loop()
     Serial.println(AccErrorZ);
     */
     // CONVERT RAW DATA TO ANGLES
+
     
-    
+    Acceleration_angle[0] = atan2( (Acc_rawY/16384.0),(Acc_rawZ/16384.0))*rad_to_deg;
+
+    /*
     if ((Acc_rawX != 0) && (Acc_rawY != 0)){
-      Acceleration_angle[0] = atan2( (Acc_rawY/16384.0),(Acc_rawZ/16384.0))*rad_to_deg;
       Acceleration_angle[1] = atan(-1*(Acc_rawX/16384.0)/sqrt(pow((Acc_rawY/16384.0),2) + pow((Acc_rawZ/16384.0),2)))*rad_to_deg;
     }
-
+    */
+    
     /*
     Serial.print(" Acceleration_angle[0]: ");
     Serial.println(Acceleration_angle[0]);
