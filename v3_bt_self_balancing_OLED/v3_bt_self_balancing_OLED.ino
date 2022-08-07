@@ -52,34 +52,23 @@ typedef struct {
   sByte volume;
   sByte tiltOffset;
   sByte panOffset;
-  float maxResult; //2100
-  float maxPID; // 200
-  float Kp; // 25.0
-  float Ki; // 0.0
-  float Kd; // 0.8
-  float tauScale; // 3
-  sByte loopInterval;
 } config ;
 
-typedef struct {
-  int mode;
-  float angle;
-  float lastPID;
-  float lastScaledPID;
-} stats ;
-
-config masterConfig = { 20, -20, 0, 2100.0, 200.0, 25.0, 0.0, 0.8, 3.0, 4};
-stats masterStats = { 0 , 0.0 , 0.0, 0.0 };
-
-void EEPROM_writeConfig()
+void EEPROM_writeConfig(config *myConfig)
 {
-  EEPROM.put(0,masterConfig);
+  EEPROM.update(0,myConfig->volume);
+  EEPROM.update(1,myConfig->tiltOffset);
+  EEPROM.update(2,myConfig->panOffset);
 }
 
-void EEPROM_readConfig()
+void EEPROM_readConfig(config *myConfig)
 {
-  EEPROM.get(0,masterConfig);
+  myConfig->volume = EEPROM.read(0);
+  myConfig->tiltOffset = EEPROM.read(1);
+  myConfig->panOffset = EEPROM.read(2);
 }
+
+config myConfig = { 20, -20, 0 };
 
 USB Usb;
 //USBHub Hub1(&Usb); // Some dongles have a hub inside
@@ -94,29 +83,8 @@ bool printTemperature, printAngle;
 #include <Wire.h>
 #include "DFRobotDFPlayerMini.h"
 
-DFRobotDFPlayerMini myDFPlayer;
-bool soundPlaying = false;
-void printDetail(uint8_t type, int value);
-
-#define IMU_ENABLED
-#define DFPLAYER
-#define RUNMOTORS
-#define OLED_I2C
-
-// might no longer be applicable !
-//#define myDebug
-//#define myDebugGyro
-//#define myDebugRC
-//#define myDebugSpeeds
-//#define myDebugPS3Analog
-
-
-#ifdef OLED_I2C // if we have an I2C OLED display attached
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-
-//#include <Fonts/Aurebesh_6pt.h>
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -131,70 +99,20 @@ void printDetail(uint8_t type, int value);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
-void OLED_print(String message,int x = 0, int y = 0){
-  
-  //display.clearDisplay();
+DFRobotDFPlayerMini myDFPlayer;
+bool soundPlaying = false;
+void printDetail(uint8_t type, int value);
 
-  display.setTextSize(1); // Draw 2X-scale text
-  display.setTextColor(SSD1306_WHITE);
-  //display.setFont(&Aurebesh6pt7b);
-  //display.setCursor(x,y);
-  display.println(message);
-  display.display();      // Show initial text
-}
+#define IMU_ENABLED
+#define DFPLAYER
+#define RUNMOTORS
 
-String modeString[] = { "Kp", "Ki", "Kd", "maxResult", "maxPID", "tauScale", "loopInterval", "Save Config (O)", "Reload Config (O)" };
-
-void showConfig(){
-  static bool toggle = true;
-
-  //toggle ^= true;
-  
-  display.clearDisplay();
-  display.setTextSize(1); // Draw 2X-scale text
-  display.setTextColor(SSD1306_WHITE);
-  
-  display.setCursor(0,0);
-
-  if (toggle)
-  {
-    display.print("Mode : ");
-  
-    masterStats.mode = constrain(masterStats.mode,0,8);
-    
-    display.println(modeString[masterStats.mode]);
-    
-    display.print("Kp : ");
-    display.println(masterConfig.Kp);
-    display.print("Ki : ");
-    display.println(masterConfig.Ki);
-    display.print("Kd : ");
-    display.println(masterConfig.Kd);
-    
-    display.print("maxResult : ");
-    display.println(masterConfig.maxResult);
-    display.print("maxPID : ");
-    display.println(masterConfig.maxPID);
-    display.print("tauScale : ");
-    display.println(masterConfig.tauScale);
-    
-    display.print("loopInterval : ");
-    display.println(masterConfig.loopInterval);
-  }
-  else{
-    display.println("Sensors: ");
-    display.print("Angle: ");
-    display.println(masterStats.angle);
-    display.print("lastPID: ");
-    display.println(masterStats.lastPID);
-    display.print("lastScaledPID: ");
-    display.println(masterStats.lastScaledPID);
-  }
-  display.display();      // Show initial text
-}
-#else 
-void OLED_print(String message,int x = 0, int y = 0) {  }
-#endif
+// might no longer be applicable !
+//#define myDebug
+//#define myDebugGyro
+//#define myDebugRC
+//#define myDebugSpeeds
+//#define myDebugPS3Analog
 
 ////////////////VARIABLE DEFINITION///////////////
 
@@ -211,8 +129,8 @@ const int MPU = 0x68; // MPU6050 I2C address
 float timePrev;
 const float rad_to_deg = 180/3.141592654;
 
-//const int LoopInterval = 4;
-//const float tauScale = 3;
+const int LoopInterval = 4;
+const float tauScale = 1.0;
 
 //  for estimating the IMU error profile
 
@@ -365,6 +283,17 @@ void calculate_IMU_error() {
   #endif
 }
 
+void OLED_print(String message,int x = 0, int y = 0){
+  
+  //display.clearDisplay();
+
+  display.setTextSize(1); // Draw 2X-scale text
+  display.setTextColor(SSD1306_WHITE);
+  //display.setCursor(x,y);
+  display.println(message);
+  display.display();      // Show initial text
+}
+
 void setup() 
 {
   
@@ -388,15 +317,6 @@ void setup()
   Serial.println ("\n***\nHello DO-BB1 ! \n");
   Serial.println ("\n***\nHello EraserMice! \n");
 
-  int cfgHeader;
-  
-  EEPROM.get(0,cfgHeader);
-
-  if (cfgHeader == 0xD0BB)
-    EEPROM.get(4,masterConfig);
-    
-#ifdef OLED_I2C
-
     // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -410,8 +330,6 @@ void setup()
 
   // Clear the buffer
   display.clearDisplay();
-
-#endif  
   
   Serial1.begin(9600); // initialize the second serial port for the DF MP3 player comms
   
@@ -493,7 +411,6 @@ void setup()
   
   Serial.print(F("\r\nPS3 Controller Active "));
   OLED_print("Controller Active");
-  OLED_print("Calibrating IMU...");
   
   calculate_IMU_error();
   
@@ -501,7 +418,9 @@ void setup()
   
   Serial.println(F("\r\nIMU Calibrated "));
   Serial.println ("Finished Setup");
-  OLED_print("Calibrated.\nSetup Complete");
+  OLED_print("IMU Calibrated\nSetup Complete");
+
+
 }
 
 int timeOut = 0;
@@ -558,13 +477,11 @@ float initialPID(float target, float current) {
 
 float calculatePID(float target, float current) { 
 
-  masterStats.angle = current;
-  //const float Kp = 25;         // (P)roportional Tuning Parameter
-  //const float Ki = 0;          // (I)ntegral Tuning Parameter        
-  //const float Kd = .8;         // (D)erivative Tuning Parameter      
+  const float Kp = 25;         // (P)roportional Tuning Parameter
+  const float Ki = 0;          // (I)ntegral Tuning Parameter        
+  const float Kd = .8;         // (D)erivative Tuning Parameter      
   
-  //const float maxResultPID = 2100;  // The maximum range for result, was 2100 in original code
-  //const float maxPID = 200;         // The maximum value that can be output, in original code, was basically 700 !
+  const float maxPID = 200;    // The maximum value that can be output, in original code, was basically 700 !
 
   // Calculate the time since function was last called
   float thisTime = millis();
@@ -578,7 +495,7 @@ float calculatePID(float target, float current) {
   errorSum = constrain(errorSum,-500,500); // maximum error to accumulate
 
   // Multiply each term by its constant, and add it all up
-  float result = (masterConfig.Kp * error) + (masterConfig.Ki * (errorSum * dT)) + (masterConfig.Kd * (current - oldValue) / dT);
+  float result = (Kp * error) + (Ki * (errorSum * dT)) + (Kd * (current - oldValue) / dT);
 
 /*
   Serial.print(" target: ");
@@ -593,12 +510,11 @@ float calculatePID(float target, float current) {
   lastTime = thisTime;
 
   // Limit PID value to maximum values
-  // note that maxResultPID (originally 2100) is a "magic" value used in the original code, subject to further research
+  // note that 2100 is a "magic" value used in the original code, subject to further research
   //
-  masterStats.lastPID = result ;
-  result = map(result,-masterConfig.maxResult,masterConfig.maxResult,-masterConfig.maxPID,masterConfig.maxPID); // suspect!!!  maybe this should be a constrain and not map, it used map in the original
+  result = map(result,-2100,2100,-maxPID,maxPID); // suspect!!!  maybe this should be a constrain and not map, it used map in the original
   
-  return masterStats.lastScaledPID = result ;
+  return result ;
 }
 
 void loop() 
@@ -625,10 +541,8 @@ void loop()
   float tilt = 90;
   float elapsedTime;
   
-#ifdef HeartBeat
   if ((millis() - heartBeat) > 1000){
       Serial.print(".");
-      heartBeat = millis();
       /*
       float elapsed = millis()-timePrev;
       display.clearDisplay();
@@ -637,9 +551,9 @@ void loop()
       display.println(elapsed);
       display.display();      // Show initial text
       */
+      heartBeat = millis();
   }
-#endif
-
+  
   // first check for button presses that don't directly effect the motion
   
   if (PS3.PS3Connected || PS3.PS3NavigationConnected){ // same for sixaxxis, or navigator
@@ -649,15 +563,7 @@ void loop()
     }
     
     if (PS3.getButtonClick(CIRCLE)) {
-      if (masterStats.mode == 7){
-        EEPROM.put(0,(int)0xD0BB);
-        EEPROM.put(4,masterConfig);
-      }else if (masterStats.mode == 8){
-        int cfgHeader;
-        EEPROM.get(0,cfgHeader);
-        if (cfgHeader == 0xD0BB)
-          EEPROM.get(4,masterConfig);
-      }else if (PS3.getButtonPress(PS))
+      if (PS3.getButtonPress(PS))
         myDFPlayer.volumeUp();
       else
         if (nextSound < mp3Count) 
@@ -690,7 +596,6 @@ void loop()
         myDFPlayer.pause();  //Play the first mp3
         soundPlaying = false;
       }
-      errorSum = 0.0;
     }
 #endif
   }else {
@@ -699,7 +604,7 @@ void loop()
   }
   static float timerValue = 0;
   
-  if (millis() - timerValue < masterConfig.loopInterval) // wait until minimum interval has passed to run the loop
+  if (millis() - timerValue < LoopInterval) // wait until minimum interval has passed to run the loop
     return;
 
   if (millis() - timerValue > 100){ // if more than 100 ms have passed, reset the timer and abort the loop, this must be the first time through
@@ -793,47 +698,16 @@ void loop()
       // make note of the last D-pad buttons clicked to set the "mode" of the analog trigger and servo control
       //
       if (PS3.getButtonClick(UP) || PS3.getButtonClick(DOWN) || PS3.getButtonClick(LEFT) || PS3.getButtonClick(RIGHT)){
-          
           dPad = 0;
-          if (PS3.getButtonPress(LEFT)){ 
+          if (PS3.getButtonPress(LEFT)) 
             dPad += 1;
-            masterStats.mode--;
-          }else if (PS3.getButtonPress(RIGHT)) {
+          else if (PS3.getButtonPress(RIGHT)) 
             dPad += 2;
-            masterStats.mode++;
-          }
+          
           if (PS3.getButtonPress(UP)) 
             dPad += 4;
           else if (PS3.getButtonPress(DOWN)) 
             dPad += 8;
-
-          if (PS3.getButtonPress(UP) || PS3.getButtonPress(DOWN)){
-            switch(masterStats.mode){
-              case 0:
-                masterConfig.Kp += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-              case 1:
-                masterConfig.Ki += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case 2:
-                masterConfig.Kd += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case 3:
-                masterConfig.maxResult += PS3.getButtonPress(UP) ? 10 : -10;
-                break;
-              case 4:
-                masterConfig.maxPID += PS3.getButtonPress(UP) ? 10 : -10;
-                break;
-              case 5:
-                masterConfig.tauScale += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case 6:
-                masterConfig.loopInterval += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-            }
-          }
-          showConfig();
-          errorSum = 0.0;
       }
 
       xAxisRaw = (PS3.getAnalogButton(L2)*2)/3; // get the magnitude of the servo control
@@ -1024,7 +898,7 @@ void loop()
     const float tau=0.075;
     float a=0.0;
     
-    a=tau/(tau+(elapsedTime/masterConfig.tauScale)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
+    a=tau/(tau+(elapsedTime/tauScale)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
     
     Total_angle[0] = a *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + (1-a)*Acceleration_angle[0];
     //Total_angle[1] = a *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + (1-a)*Acceleration_angle[1];// really don't care about the orthogonal axis (roll)
