@@ -143,12 +143,11 @@ void OLED_print(String message,int x = 0, int y = 0){
   display.display();      // Show initial text
 }
 
-String modeString[] = { "Kp", "Ki", "Kd", "maxResult", "maxPID", "tauScale", "loopInterval", "Save Config (O)", "Reload Config (O)" };
+String modeString[] = { "Kp", "Ki", "Kd", "maxResult", "maxPID", "tauScale", "loopInterval", "volume", "panOffset", "tiltOffset", "Save (O)", "Restore (O)" };
+
+enum modes { mKp, mKi, mKd, mMaxResult, mMaxPID, mTauScale, mLoopInterval, mVolume, mPanOffset, mTiltOffset, mSave, mRestore };
 
 void showConfig(){
-  static bool toggle = true;
-
-  //toggle ^= true;
   
   display.clearDisplay();
   display.setTextSize(1); // Draw 2X-scale text
@@ -156,39 +155,55 @@ void showConfig(){
   
   display.setCursor(0,0);
 
-  if (toggle)
   {
     display.print("Mode : ");
   
-    masterStats.mode = constrain(masterStats.mode,0,8);
+    masterStats.mode = constrain(masterStats.mode, mKp, mRestore);
     
     display.println(modeString[masterStats.mode]);
-    
-    display.print("Kp : ");
-    display.println(masterConfig.Kp);
-    display.print("Ki : ");
-    display.println(masterConfig.Ki);
-    display.print("Kd : ");
-    display.println(masterConfig.Kd);
-    
-    display.print("maxResult : ");
-    display.println(masterConfig.maxResult);
-    display.print("maxPID : ");
-    display.println(masterConfig.maxPID);
-    display.print("tauScale : ");
-    display.println(masterConfig.tauScale);
-    
-    display.print("loopInterval : ");
-    display.println(masterConfig.loopInterval);
-  }
-  else{
-    display.println("Sensors: ");
-    display.print("Angle: ");
-    display.println(masterStats.angle);
-    display.print("lastPID: ");
-    display.println(masterStats.lastPID);
-    display.print("lastScaledPID: ");
-    display.println(masterStats.lastScaledPID);
+
+    if (masterStats.mode == mSave){
+      display.println("Press O to SAVE ");
+      display.println("config to EEPROM ");
+    }else if (masterStats.mode == mRestore){
+      display.println("Press O to RESTORE ");
+      display.println("config from EEPROM ");
+    }else if (masterStats.mode <= mLoopInterval){
+      display.print("Kp : ");
+      display.println(masterConfig.Kp);
+      display.print("Ki : ");
+      display.println(masterConfig.Ki);
+      display.print("Kd : ");
+      display.println(masterConfig.Kd);
+      
+      display.print("maxResult : ");
+      display.println(masterConfig.maxResult);
+      display.print("maxPID : ");
+      display.println(masterConfig.maxPID);
+      display.print("tauScale : ");
+      display.println(masterConfig.tauScale);
+      
+      display.print("loopInterval : ");
+      display.println(masterConfig.loopInterval);
+    }else{
+      display.print("volume : ");
+      display.println(masterConfig.volume);
+      
+      display.print("panOffset : ");
+      display.println(masterConfig.panOffset);
+      display.print("tiltOffset : ");
+      display.println(masterConfig.tiltOffset);
+
+      /*
+      display.println("\nSensors last read: ");
+      display.print("Angle: ");
+      display.println(masterStats.angle);
+      display.print("lastPID: ");
+      display.print(masterStats.lastPID);
+      display.print(" lastScaledPID: ");
+      display.println(masterStats.lastScaledPID);
+      */
+    }
   }
   display.display();      // Show initial text
 }
@@ -223,7 +238,7 @@ int nextSound = 0,mp3Count = 0;
 
 float heartBeat;
 
-int tiltOffset = -22;
+//int tiltOffset = -22;
 
 bool IMU_Enabled = true; // enable the balancing by default
 
@@ -432,7 +447,7 @@ void setup()
   Serial.println(myDFPlayer.readEQ()); //read EQ setting
   Serial.println(mp3Count = myDFPlayer.readFileCounts(DFPLAYER_DEVICE_SD)); //read EQ setting
 
-  myDFPlayer.volume(15);  //Set volume value. From 0 to 30
+  myDFPlayer.volume(masterConfig.volume);  //Set volume value. From 0 to 30
   myDFPlayer.play(2);  //Play the first mp3
   
 #endif
@@ -468,8 +483,8 @@ void setup()
   tiltServo.attach(tiltPWM);  // attach the tilt servo to a servo object
   panServo.attach(panPWM);    // attach the pan servo to a servo object
 
-  tiltServo.write(90.0+tiltOffset);
-  panServo.write(90.0);
+  tiltServo.write(90.0+ masterConfig.tiltOffset);
+  panServo.write(90.0+ masterConfig.panOffset);
   
   TCCR5B = TCCR5B & B11111000 | B00000001;  // for PWM frequency of 31372.55 Hz
   heartBeat = timePrev = millis(); ///////////////STARTS COUNTING TIME IN MILLISECONDS/////////////
@@ -621,8 +636,8 @@ void loop()
   
   static int dPad = 0;
   int xAxis = 0,yAxis = 0;
-  float pan = 90;
-  float tilt = 90;
+  float pan = 90 + masterConfig.panOffset;
+  float tilt = 90 + masterConfig.tiltOffset;
   float elapsedTime;
   
 #ifdef HeartBeat
@@ -649,33 +664,35 @@ void loop()
     }
     
     if (PS3.getButtonClick(CIRCLE)) {
-      if (masterStats.mode == 7){
+      if (masterStats.mode == mSave){
         EEPROM.put(0,(int)0xD0BB);
         EEPROM.put(4,masterConfig);
-      }else if (masterStats.mode == 8){
+      }else if (masterStats.mode == mRestore){
         int cfgHeader;
         EEPROM.get(0,cfgHeader);
         if (cfgHeader == 0xD0BB)
           EEPROM.get(4,masterConfig);
-      }else if (PS3.getButtonPress(PS))
+      }else if (PS3.getButtonPress(PS)){
         myDFPlayer.volumeUp();
-      else
+        masterConfig.volume++;
+      }else
         if (nextSound < mp3Count) 
           nextSound++;
     }
     if (PS3.getButtonClick(CROSS)){
-      if (PS3.getButtonPress(PS))
+      if (PS3.getButtonPress(PS)){
         myDFPlayer.volumeDown();
-      else
+        masterConfig.volume--;
+      }else
         if (nextSound > 0) 
           nextSound--;
     }
     
     if (PS3.getButtonPress(PS)){
       if (PS3.getButtonClick(UP)) 
-        tiltOffset++;
+        masterConfig.tiltOffset++;
       else if (PS3.getButtonClick(DOWN)) 
-        tiltOffset--;
+        masterConfig.tiltOffset--;
     }
     
 #ifdef DFPLAYER   
@@ -809,26 +826,38 @@ void loop()
 
           if (PS3.getButtonPress(UP) || PS3.getButtonPress(DOWN)){
             switch(masterStats.mode){
-              case 0:
+              case mKp:
                 masterConfig.Kp += PS3.getButtonPress(UP) ? 1 : -1;
                 break;
-              case 1:
+              case mKi:
                 masterConfig.Ki += PS3.getButtonPress(UP) ? .1 : -.1;
                 break;
-              case 2:
+              case mKd:
                 masterConfig.Kd += PS3.getButtonPress(UP) ? .1 : -.1;
                 break;
-              case 3:
+              case mMaxResult:
                 masterConfig.maxResult += PS3.getButtonPress(UP) ? 10 : -10;
                 break;
-              case 4:
+              case mMaxPID:
                 masterConfig.maxPID += PS3.getButtonPress(UP) ? 10 : -10;
                 break;
-              case 5:
+              case mTauScale:
                 masterConfig.tauScale += PS3.getButtonPress(UP) ? .1 : -.1;
                 break;
-              case 6:
+              case mVolume:
+                masterConfig.volume += PS3.getButtonPress(UP) ? 1 : -1;
+                masterConfig.volume = constrain(masterConfig.volume, 0, 30);
+                myDFPlayer.volume(masterConfig.volume);  //Set volume value. From 0 to 30
+                
+                break;
+              case mLoopInterval:
                 masterConfig.loopInterval += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+              case mPanOffset:
+                masterConfig.panOffset += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+              case mTiltOffset:
+                masterConfig.tiltOffset += PS3.getButtonPress(UP) ? 1 : -1;
                 break;
             }
           }
@@ -863,8 +892,8 @@ void loop()
       xAxisRaw = constrain( xAxisRaw, 0,255);
       yAxisRaw = constrain( yAxisRaw, 0,255);
       
-      pan = (xAxisRaw/255.0)*180.0;
-      tilt = ((yAxisRaw/255.0)*180.0) + tiltOffset; // apply the tilt offset ("trim")
+      pan = ((xAxisRaw/255.0)*180.0) + masterConfig.panOffset ;
+      tilt = ((yAxisRaw/255.0)*180.0) + masterConfig.tiltOffset; // apply the tilt offset ("trim")
   }
     
   panServo.write(pan);
