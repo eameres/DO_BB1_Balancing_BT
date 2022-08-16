@@ -858,6 +858,11 @@ void loop()
       
         xAxisRaw = constrain( xAxisRaw, 0,255);
         yAxisRaw = constrain( yAxisRaw, 0,255);
+
+        if (abs(xAxisRaw - lastT) > 4){
+          xAxisRaw  = lastT + ((xAxisRaw > lastT) ? 1 : -1);
+        }
+        lastT = xAxisRaw;
       }
       
       pan = ((xAxisRaw/255.0)*180.0) + masterConfig->panOffset ;
