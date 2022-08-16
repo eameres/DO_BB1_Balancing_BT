@@ -59,26 +59,36 @@ typedef struct {
   float Kd; // 0.8
   float tauScale; // 3
   sByte loopInterval;
+  // float maxSpeed;
+  // float speedMix;
+  // float maxPan;
+  // float maxTilt;
+  // float deadZoneX;
+  // float deadZoneY;
+  // float deadZoneT;
 } config ;
 
 typedef struct {
   int mode;
+  bool configMode;
   float angle;
   float lastPID;
   float lastScaledPID;
 } stats ;
 
-config masterConfig = { 20, -20, 0, 2100.0, 200.0, 25.0, 0.0, 0.8, 3.0, 4};
-stats masterStats = { 0 , 0.0 , 0.0, 0.0 };
+config config1 = { 20, -20, 0, 2100.0, 200.0, 25.0, 0.0, 0.8, 3.0, 4};
+config *masterConfig = &config1;
+
+stats masterStats = { 0 , false, 0.0 , 0.0, 0.0 };
 
 void EEPROM_writeConfig()
 {
-  EEPROM.put(0,masterConfig);
+  EEPROM.put(0,*masterConfig);
 }
 
 void EEPROM_readConfig()
 {
-  EEPROM.get(0,masterConfig);
+  EEPROM.get(0,*masterConfig);
 }
 
 USB Usb;
@@ -154,8 +164,8 @@ void showConfig(){
   display.setTextColor(SSD1306_WHITE);
   
   display.setCursor(0,0);
-
-  {
+  if (masterStats.configMode){
+    
     display.print("Mode : ");
   
     masterStats.mode = constrain(masterStats.mode, mKp, mRestore);
@@ -170,29 +180,29 @@ void showConfig(){
       display.println("config from EEPROM ");
     }else if (masterStats.mode <= mLoopInterval){
       display.print("Kp : ");
-      display.println(masterConfig.Kp);
+      display.println(masterConfig->Kp);
       display.print("Ki : ");
-      display.println(masterConfig.Ki);
+      display.println(masterConfig->Ki);
       display.print("Kd : ");
-      display.println(masterConfig.Kd);
+      display.println(masterConfig->Kd);
       
       display.print("maxResult : ");
-      display.println(masterConfig.maxResult);
+      display.println(masterConfig->maxResult);
       display.print("maxPID : ");
-      display.println(masterConfig.maxPID);
+      display.println(masterConfig->maxPID);
       display.print("tauScale : ");
-      display.println(masterConfig.tauScale);
+      display.println(masterConfig->tauScale);
       
       display.print("loopInterval : ");
-      display.println(masterConfig.loopInterval);
+      display.println(masterConfig->loopInterval);
     }else{
       display.print("volume : ");
-      display.println(masterConfig.volume);
+      display.println(masterConfig->volume);
       
       display.print("panOffset : ");
-      display.println(masterConfig.panOffset);
+      display.println(masterConfig->panOffset);
       display.print("tiltOffset : ");
-      display.println(masterConfig.tiltOffset);
+      display.println(masterConfig->tiltOffset);
 
       /*
       display.println("\nSensors last read: ");
@@ -204,7 +214,9 @@ void showConfig(){
       display.println(masterStats.lastScaledPID);
       */
     }
-  }
+  }else
+      display.println("Press PS for Config");
+      
   display.display();      // Show initial text
 }
 #else 
@@ -408,7 +420,7 @@ void setup()
   EEPROM.get(0,cfgHeader);
 
   if (cfgHeader == 0xD0BB)
-    EEPROM.get(4,masterConfig);
+    EEPROM.get(4,*masterConfig);
     
 #ifdef OLED_I2C
 
@@ -447,7 +459,7 @@ void setup()
   Serial.println(myDFPlayer.readEQ()); //read EQ setting
   Serial.println(mp3Count = myDFPlayer.readFileCounts(DFPLAYER_DEVICE_SD)); //read EQ setting
 
-  myDFPlayer.volume(masterConfig.volume);  //Set volume value. From 0 to 30
+  myDFPlayer.volume(masterConfig->volume);  //Set volume value. From 0 to 30
   myDFPlayer.play(2);  //Play the first mp3
   
 #endif
@@ -483,8 +495,8 @@ void setup()
   tiltServo.attach(tiltPWM);  // attach the tilt servo to a servo object
   panServo.attach(panPWM);    // attach the pan servo to a servo object
 
-  tiltServo.write(90.0+ masterConfig.tiltOffset);
-  panServo.write(90.0+ masterConfig.panOffset);
+  tiltServo.write(90.0+ masterConfig->tiltOffset);
+  panServo.write(90.0+ masterConfig->panOffset);
   
   TCCR5B = TCCR5B & B11111000 | B00000001;  // for PWM frequency of 31372.55 Hz
   heartBeat = timePrev = millis(); ///////////////STARTS COUNTING TIME IN MILLISECONDS/////////////
@@ -593,7 +605,7 @@ float calculatePID(float target, float current) {
   errorSum = constrain(errorSum,-500,500); // maximum error to accumulate
 
   // Multiply each term by its constant, and add it all up
-  float result = (masterConfig.Kp * error) + (masterConfig.Ki * (errorSum * dT)) + (masterConfig.Kd * (current - oldValue) / dT);
+  float result = (masterConfig->Kp * error) + (masterConfig->Ki * (errorSum * dT)) + (masterConfig->Kd * (current - oldValue) / dT);
 
 /*
   Serial.print(" target: ");
@@ -611,11 +623,47 @@ float calculatePID(float target, float current) {
   // note that maxResultPID (originally 2100) is a "magic" value used in the original code, subject to further research
   //
   masterStats.lastPID = result ;
-  result = map(result,-masterConfig.maxResult,masterConfig.maxResult,-masterConfig.maxPID,masterConfig.maxPID); // suspect!!!  maybe this should be a constrain and not map, it used map in the original
+  result = map(result,-masterConfig->maxResult,masterConfig->maxResult,-masterConfig->maxPID,masterConfig->maxPID); // suspect!!!  maybe this should be a constrain and not map, it used map in the original
   
   return masterStats.lastScaledPID = result ;
 }
 
+
+void getMoveStick(AnalogHatEnum xHat,AnalogHatEnum yHat, int *xAxis, int *yAxis)
+{   
+    int xAxisRaw;
+    int yAxisRaw;
+    
+      xAxisRaw = PS3.getAnalogHat(xHat);
+      yAxisRaw = PS3.getAnalogHat(yHat);
+  
+      xAxisRaw -=  127; 
+      yAxisRaw = (255 - yAxisRaw) - 127;
+
+      // create a dead zone of -12 to 12 on each axis
+      
+      if (abs(xAxisRaw) < 12)
+       xAxisRaw = 0;
+
+      if (xAxisRaw > 0) 
+        xAxisRaw = map(xAxisRaw,12,127,0,127);
+      else if (xAxisRaw < 0) 
+        xAxisRaw = map(xAxisRaw,-12,-127,0,-127);
+
+      if (abs(yAxisRaw) < 12)
+        yAxisRaw = 0;
+        
+      if (yAxisRaw > 0)
+        yAxisRaw = map(yAxisRaw,12,127,0,127);
+      else if (yAxisRaw < 0) 
+        yAxisRaw = map(yAxisRaw,-12,-127,0,-127);
+
+      //  "mix" the 2 axes to translate from joystick to "tank-style" control, could be fancier, perhaps proportional.
+      
+      *xAxis = constrain(yAxisRaw + xAxisRaw,-127,127);
+      *yAxis = constrain(yAxisRaw - xAxisRaw,-127,127);
+}
+      
 void loop() 
 {
   float Acc_rawX, Acc_rawY, Acc_rawZ;
@@ -634,10 +682,9 @@ void loop()
 
   Usb.Task();
   
-  static int dPad = 0;
   int xAxis = 0,yAxis = 0;
-  float pan = 90 + masterConfig.panOffset;
-  float tilt = 90 + masterConfig.tiltOffset;
+  float pan = 90 + masterConfig->panOffset;
+  float tilt = 90 + masterConfig->tiltOffset;
   float elapsedTime;
   
 #ifdef HeartBeat
@@ -659,40 +706,87 @@ void loop()
   
   if (PS3.PS3Connected || PS3.PS3NavigationConnected){ // same for sixaxxis, or navigator
 
+    if (PS3.getButtonClick(PS)){
+      masterStats.configMode ^= true;
+      showConfig();
+      errorSum = 0.0;
+    }
+      
     if (PS3.getButtonClick(L3)){
       IMU_Enabled = !IMU_Enabled;
     }
     
-    if (PS3.getButtonClick(CIRCLE)) {
-      if (masterStats.mode == mSave){
-        EEPROM.put(0,(int)0xD0BB);
-        EEPROM.put(4,masterConfig);
-      }else if (masterStats.mode == mRestore){
-        int cfgHeader;
-        EEPROM.get(0,cfgHeader);
-        if (cfgHeader == 0xD0BB)
-          EEPROM.get(4,masterConfig);
-      }else if (PS3.getButtonPress(PS)){
-        myDFPlayer.volumeUp();
-        masterConfig.volume++;
-      }else
-        if (nextSound < mp3Count) 
-          nextSound++;
-    }
-    if (PS3.getButtonClick(CROSS)){
-      if (PS3.getButtonPress(PS)){
-        myDFPlayer.volumeDown();
-        masterConfig.volume--;
-      }else
-        if (nextSound > 0) 
-          nextSound--;
-    }
-    
-    if (PS3.getButtonPress(PS)){
-      if (PS3.getButtonClick(UP)) 
-        masterConfig.tiltOffset++;
-      else if (PS3.getButtonClick(DOWN)) 
-        masterConfig.tiltOffset--;
+    if (masterStats.configMode){
+      if (PS3.getButtonClick(CIRCLE)) {
+        if (masterStats.mode == mSave){
+          EEPROM.put(0,(int)0xD0BB);
+          EEPROM.put(4,*masterConfig);
+        }else if (masterStats.mode == mRestore){
+          int cfgHeader;
+          EEPROM.get(0,cfgHeader);
+          if (cfgHeader == 0xD0BB)
+            EEPROM.get(4,*masterConfig);
+        }
+      }
+
+      // make note of the last D-pad buttons clicked to set the "mode" of the analog trigger and servo control
+      //
+      {   
+          if (PS3.getButtonClick(LEFT)){ 
+            masterStats.mode--;
+          }else if (PS3.getButtonClick(RIGHT)) {
+            masterStats.mode++;
+          }
+
+          if (PS3.getButtonClick(UP) || PS3.getButtonClick(DOWN)){
+            switch(masterStats.mode){
+              case mKp:
+                masterConfig->Kp += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+              case mKi:
+                masterConfig->Ki += PS3.getButtonPress(UP) ? .1 : -.1;
+                break;
+              case mKd:
+                masterConfig->Kd += PS3.getButtonPress(UP) ? .1 : -.1;
+                break;
+              case mMaxResult:
+                masterConfig->maxResult += PS3.getButtonPress(UP) ? 10 : -10;
+                break;
+              case mMaxPID:
+                masterConfig->maxPID += PS3.getButtonPress(UP) ? 10 : -10;
+                break;
+              case mTauScale:
+                masterConfig->tauScale += PS3.getButtonPress(UP) ? .1 : -.1;
+                break;
+              case mVolume:
+                masterConfig->volume += PS3.getButtonPress(UP) ? 1 : -1;
+                masterConfig->volume = constrain(masterConfig->volume, 0, 30);
+                myDFPlayer.volume(masterConfig->volume);  //Set volume value. From 0 to 30
+                
+                break;
+              case mLoopInterval:
+                masterConfig->loopInterval += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+              case mPanOffset:
+                masterConfig->panOffset += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+              case mTiltOffset:
+                masterConfig->tiltOffset += PS3.getButtonPress(UP) ? 1 : -1;
+                break;
+            }
+          }
+          showConfig();
+          errorSum = 0.0;
+      }
+    }else{
+      if (PS3.getButtonClick(CIRCLE)) {
+          if (nextSound < mp3Count) 
+            nextSound++;
+      }
+      if (PS3.getButtonClick(CROSS)){
+          if (nextSound > 0) 
+            nextSound--;
+      }
     }
     
 #ifdef DFPLAYER   
@@ -716,7 +810,7 @@ void loop()
   }
   static float timerValue = 0;
   
-  if (millis() - timerValue < masterConfig.loopInterval) // wait until minimum interval has passed to run the loop
+  if (millis() - timerValue < masterConfig->loopInterval) // wait until minimum interval has passed to run the loop
     return;
 
   if (millis() - timerValue > 100){ // if more than 100 ms have passed, reset the timer and abort the loop, this must be the first time through
@@ -726,174 +820,48 @@ void loop()
   
   timerValue = millis();
 
-
   if (PS3.PS3Connected){ // sixaxis PS3 controller attached (dual analog sticks)
       int xAxisRaw,yAxisRaw;
-    
-      xAxisRaw = PS3.getAnalogHat(RightHatX) - 127;
-      yAxisRaw = (255 - PS3.getAnalogHat(RightHatY)) - 127;
 
-      // create a dead zone of -12 to 12 on each axis
+      getMoveStick(RightHatX,RightHatY, &xAxis, &yAxis);
+        
+      xAxisRaw = PS3.getAnalogHat(LeftHatX);
+      yAxisRaw = (255 - PS3.getAnalogHat(LeftHatY));
       
-      if (abs(xAxisRaw) < 12)
-        xAxisRaw = 0;
-
-      if (xAxisRaw > 0) xAxisRaw = map(xAxisRaw,12,127,0,127);
-      else if (xAxisRaw < 0) xAxisRaw = map(xAxisRaw,-12,-127,0,-127);
-
-      if (abs(yAxisRaw) < 12)
-        yAxisRaw = 0;
-        
-      if (yAxisRaw > 0) yAxisRaw = map(yAxisRaw,12,127,0,127);
-      else if (yAxisRaw < 0) yAxisRaw = map(yAxisRaw,-12,-127,0,-127);
-        
-      xAxis = constrain(yAxisRaw + xAxisRaw,-127,127);
-      yAxis = constrain(yAxisRaw - xAxisRaw,-127,127);
-        
-      xAxisRaw = PS3.getAnalogHat(LeftHatX) - 127;
-      yAxisRaw = (255 - PS3.getAnalogHat(LeftHatY)) - 127;
+      pan = ((xAxisRaw/255.0)*180.0) + masterConfig->panOffset ;
+      tilt = ((yAxisRaw/255.0)*180.0) + masterConfig->tiltOffset; // apply the tilt offset ("trim")
       
-      pan = ((xAxisRaw+127)/255.0)*180.0;
-      tilt = ((yAxisRaw+127)/255.0)*180.0;
   }else if (PS3.PS3NavigationConnected){ // single handed navigation control (PS3 move nav)
       
-      int xAxisRaw,yAxisRaw;
-    
-      xAxisRaw = PS3.getAnalogHat(LeftHatX) - 127;
-      yAxisRaw = (255 - PS3.getAnalogHat(LeftHatY)) - 127;
+      int xAxisRaw = 127,yAxisRaw = 127;
 
-      /*
-      Serial.print("xraw ");
-      Serial.print(xAxisRaw);
-      Serial.print("yraw ");
-      Serial.print(yAxisRaw);
-      */
-
+      getMoveStick(LeftHatX,LeftHatY,&xAxis,&yAxis);
       
-      // create a dead zone of -12 to 12 on each axis
-      
-      if (abs(xAxisRaw) < 12)
-       xAxisRaw = 0;
-
-      if (xAxisRaw > 0) xAxisRaw = map(xAxisRaw,12,127,0,127);
-      else if (xAxisRaw < 0) xAxisRaw = map(xAxisRaw,-12,-127,0,-127);
-
-      if (abs(yAxisRaw) < 12)
-        yAxisRaw = 0;
+      if (!masterStats.configMode){ // if we're in config mode, reserve the dPad for that, but allow for positioning of servos "naturally"
         
-      if (yAxisRaw > 0) yAxisRaw = map(yAxisRaw,12,127,0,127);
-      else if (yAxisRaw < 0) yAxisRaw = map(yAxisRaw,-12,-127,0,-127);
-
-      /*
-      Serial.print("xrawClipped ");
-      Serial.print(xAxisRaw);
-      Serial.print("yrawClipped ");
-      Serial.print(yAxisRaw);
-      */
-/*
-      if (abs(xAxisRaw - lastX) > 8){
-        xAxisRaw  = lastX + ((xAxisRaw > lastX) ? 1 : -1);
-      }
-
-      if (abs(yAxisRaw - lastY) > 8){
-        yAxisRaw  = lastY + ((yAxisRaw > lastY) ? 1 : -1);
-      }
+        int hatRaw;
       
-      lastX = xAxisRaw;
-      lastY = yAxisRaw;
-*/      
-      //  "mix" the 2 axes to translate from joystick to "tank-style" control, could be fancier, perhaps proportional.
+        hatRaw = PS3.getAnalogButton(L2)/2; // get the magnitude of the servo control
+        hatRaw = map(hatRaw,0,127,12,127);
       
-      xAxis = constrain(yAxisRaw + xAxisRaw,-127,127);
-      yAxis = constrain(yAxisRaw - xAxisRaw,-127,127);
-
-      // make note of the last D-pad buttons clicked to set the "mode" of the analog trigger and servo control
-      //
-      if (PS3.getButtonClick(UP) || PS3.getButtonClick(DOWN) || PS3.getButtonClick(LEFT) || PS3.getButtonClick(RIGHT)){
-          
-          dPad = 0;
-          if (PS3.getButtonPress(LEFT)){ 
-            dPad += 1;
-            masterStats.mode--;
-          }else if (PS3.getButtonPress(RIGHT)) {
-            dPad += 2;
-            masterStats.mode++;
-          }
-          if (PS3.getButtonPress(UP)) 
-            dPad += 4;
-          else if (PS3.getButtonPress(DOWN)) 
-            dPad += 8;
-
-          if (PS3.getButtonPress(UP) || PS3.getButtonPress(DOWN)){
-            switch(masterStats.mode){
-              case mKp:
-                masterConfig.Kp += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-              case mKi:
-                masterConfig.Ki += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case mKd:
-                masterConfig.Kd += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case mMaxResult:
-                masterConfig.maxResult += PS3.getButtonPress(UP) ? 10 : -10;
-                break;
-              case mMaxPID:
-                masterConfig.maxPID += PS3.getButtonPress(UP) ? 10 : -10;
-                break;
-              case mTauScale:
-                masterConfig.tauScale += PS3.getButtonPress(UP) ? .1 : -.1;
-                break;
-              case mVolume:
-                masterConfig.volume += PS3.getButtonPress(UP) ? 1 : -1;
-                masterConfig.volume = constrain(masterConfig.volume, 0, 30);
-                myDFPlayer.volume(masterConfig.volume);  //Set volume value. From 0 to 30
-                
-                break;
-              case mLoopInterval:
-                masterConfig.loopInterval += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-              case mPanOffset:
-                masterConfig.panOffset += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-              case mTiltOffset:
-                masterConfig.tiltOffset += PS3.getButtonPress(UP) ? 1 : -1;
-                break;
-            }
-          }
-          showConfig();
-          errorSum = 0.0;
-      }
-
-      xAxisRaw = (PS3.getAnalogButton(L2)*2)/3; // get the magnitude of the servo control
-
-      if (abs(xAxisRaw - lastT) > 4){
-        xAxisRaw  = lastT + ((xAxisRaw > lastT) ? 1 : -1);
+        if (PS3.getButtonPress(LEFT)){
+          xAxisRaw += hatRaw; 
+        }else if (PS3.getButtonPress(RIGHT)){
+          xAxisRaw -= hatRaw;
+        }
+        
+        if (PS3.getButtonPress(UP)){
+          yAxisRaw += hatRaw/2; 
+        }else if (PS3.getButtonPress(DOWN)){
+          yAxisRaw -= hatRaw/2; 
+        }
+      
+        xAxisRaw = constrain( xAxisRaw, 0,255);
+        yAxisRaw = constrain( yAxisRaw, 0,255);
       }
       
-      yAxisRaw = xAxisRaw;
-      
-      lastT = xAxisRaw;
-
-      if (dPad & 1)
-        xAxisRaw += 127;
-      else if (dPad & 2)
-        xAxisRaw = 127 - xAxisRaw;
-      else 
-        xAxisRaw = 127;
-
-      if (dPad & 4)
-        yAxisRaw += 127;
-      else if (dPad & 8)
-        yAxisRaw = 127 - yAxisRaw;
-      else 
-        yAxisRaw = 127;
-
-      xAxisRaw = constrain( xAxisRaw, 0,255);
-      yAxisRaw = constrain( yAxisRaw, 0,255);
-      
-      pan = ((xAxisRaw/255.0)*180.0) + masterConfig.panOffset ;
-      tilt = ((yAxisRaw/255.0)*180.0) + masterConfig.tiltOffset; // apply the tilt offset ("trim")
+      pan = ((xAxisRaw/255.0)*180.0) + masterConfig->panOffset ;
+      tilt = ((yAxisRaw/255.0)*180.0) + masterConfig->tiltOffset; // apply the tilt offset ("trim")
   }
     
   panServo.write(pan);
@@ -910,17 +878,6 @@ void loop()
 
   pDebug = true;
 
-#endif
-
-
-#ifdef myDebugSpeeds
-
-  if(pDebug){
-    Serial.print (",speed1: ");
-    Serial.print (motorspeed1);
-    Serial.print (",speed2: ");
-    Serial.print (motorspeed2);
-  }
 #endif
 
 #ifdef IMU_ENABLED
@@ -962,7 +919,7 @@ void loop()
     
     //Acc_rawX -= AccErrorX; 
     Acc_rawY -= AccErrorY; 
-    //Acc_rawZ -= AccErrorZ;
+    //Acc_rawZ -= AccErrorZ; // this should be factored in, but is currently causing serious oscillations!
 
     //Acc_rawX = Acc_rawZ = 0;
 
@@ -1053,7 +1010,7 @@ void loop()
     const float tau=0.075;
     float a=0.0;
     
-    a=tau/(tau+(elapsedTime/masterConfig.tauScale)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
+    a=tau/(tau+(elapsedTime/masterConfig->tauScale)); // running at 4ms intervals, this sets high coeff at 1.67 (i.e. .978 and 0.022) (4ms is 1.33 which yields .983 and .017)
     
     Total_angle[0] = a *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + (1-a)*Acceleration_angle[0];
     //Total_angle[1] = a *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + (1-a)*Acceleration_angle[1];// really don't care about the orthogonal axis (roll)
